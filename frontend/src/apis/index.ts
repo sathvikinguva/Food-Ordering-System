@@ -1,5 +1,4 @@
 import type {
-  CartItem,
   ChartPoint,
   DashboardMetric,
   MenuItem,
@@ -20,7 +19,7 @@ type ApiResponse<T> = {
 };
 
 type AuthResponse = {
-  token: string;
+  token: string | null;
   userId: number;
   name: string;
   email: string;
@@ -32,6 +31,7 @@ type MenuItemDTO = {
   restaurantId: number;
   itemName: string;
   description: string;
+  category: string;
   price: number;
   availability: boolean;
 };
@@ -178,15 +178,25 @@ const toOrderStatus = (status: string): OrderStatus => {
   }
 };
 
+const toBackendOrderStatus = (status: string) => {
+  if (status === "PLACED") {
+    return "PENDING";
+  }
+  return status;
+};
+
 const mapRestaurant = (dto: RestaurantDTO): Restaurant => ({
   id: String(dto.restaurantId ?? ""),
   name: dto.name ?? "Restaurant",
+  address: dto.address ?? "",
   cuisine: dto.cuisine ?? "",
   rating: 4.5,
   etaMinutes: 30,
   priceLevel: "$$",
   image: DEFAULT_RESTAURANT_IMAGE,
   tags: dto.active ? ["Open"] : ["Closed"],
+  adminId: dto.adminId,
+  active: dto.active,
 });
 
 const mapMenuItem = (dto: MenuItemDTO): MenuItem => ({
@@ -196,7 +206,7 @@ const mapMenuItem = (dto: MenuItemDTO): MenuItem => ({
   description: dto.description ?? "",
   price: Number(dto.price ?? 0),
   isVeg: false,
-  category: "Main",
+  category: dto.category ?? "Main",
   image: DEFAULT_MENU_IMAGE,
 });
 
@@ -236,7 +246,7 @@ export const login = async (email: string, password: string) => {
     body: JSON.stringify({ email, password }),
   });
   return {
-    token: data.token,
+    token: data.token ?? "",
     user: {
       id: String(data.userId ?? ""),
       name: data.name,
@@ -257,7 +267,7 @@ export const register = async (
     body: JSON.stringify({ name, email, password, role }),
   });
   return {
-    token: data.token,
+    token: data.token ?? "",
     user: {
       id: String(data.userId ?? ""),
       name: data.name,
@@ -361,6 +371,24 @@ export const createRestaurant = async (payload: {
   return mapRestaurant(data);
 };
 
+export const updateRestaurant = async (id: string, payload: {
+  name: string;
+  address: string;
+  cuisine: string;
+  adminId: number;
+  active?: boolean;
+}) => {
+  const data = await apiRequest<RestaurantDTO>(`/api/superadmin/restaurants/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  return mapRestaurant(data);
+};
+
+export const deleteRestaurant = async (id: string) => {
+  await apiRequest(`/api/superadmin/restaurants/${id}`, { method: "DELETE" });
+};
+
 export const updateRestaurantStatus = async (id: string, active: boolean) => {
   const data = await apiRequest<RestaurantDTO>(
     `/api/superadmin/restaurants/${id}/status?active=${active}`,
@@ -373,6 +401,7 @@ export const createMenuItem = async (payload: {
   restaurantId: number;
   itemName: string;
   description: string;
+  category: string;
   price: number;
   availability?: boolean;
 }) => {
@@ -381,6 +410,25 @@ export const createMenuItem = async (payload: {
     body: JSON.stringify(payload),
   });
   return mapMenuItem(data);
+};
+
+export const updateMenuItem = async (id: string, payload: {
+  restaurantId: number;
+  itemName: string;
+  description: string;
+  category: string;
+  price: number;
+  availability?: boolean;
+}) => {
+  const data = await apiRequest<MenuItemDTO>(`/api/admin/menu/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  return mapMenuItem(data);
+};
+
+export const deleteMenuItem = async (id: string) => {
+  await apiRequest(`/api/admin/menu/${id}`, { method: "DELETE" });
 };
 
 export const getCart = async () => {
@@ -471,7 +519,7 @@ export const getAdminOrders = async () => {
 export const updateOrderStatus = async (id: string, status: string) => {
   const data = await apiRequest<OrderDTO>(`/api/admin/orders/${id}/status`, {
     method: "PUT",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status: toBackendOrderStatus(status) }),
   });
   return mapOrder(data);
 };
@@ -497,7 +545,7 @@ export const getPaymentsByOrder = async (orderId: number) => {
 export const sendEmailNotification = async (payload: {
   to: string;
   subject: string;
-  message: string;
+  body: string;
 }) => {
   return unwrapApiResponse("/api/notifications/send-email", {
     method: "POST",
@@ -591,6 +639,18 @@ export const getPlatformMetrics = async (): Promise<DashboardMetric[]> => {
 export const getUsers = async () => {
   const data = await apiRequest<UserDTO[]>("/api/superadmin/users");
   return data.map(mapUser);
+};
+
+export const updateUserRole = async (id: string, role: Role) => {
+  const data = await apiRequest<UserDTO>(`/api/superadmin/users/${id}/role`, {
+    method: "PUT",
+    body: JSON.stringify({ role }),
+  });
+  return mapUser(data);
+};
+
+export const deleteUser = async (id: string) => {
+  await apiRequest(`/api/superadmin/users/${id}`, { method: "DELETE" });
 };
 
 export const getSystemLogs = async () => {
